@@ -5,11 +5,10 @@ import numpy as np
 import sqlite3
 import os
 import time
-import random
 from datetime import datetime
 
-# --- DESIGN & DISKO EFFEKTE ---
-st.set_page_config(page_title="AI Fund-Arena: Clicker Edition", layout="wide")
+# --- DESIGN & DISKO ---
+st.set_page_config(page_title="AI Fund-Arena: Empire", layout="wide")
 
 st.markdown("""
     <style>
@@ -21,13 +20,13 @@ st.markdown("""
         100% { background-color: #ff0000; }
     }
     .disco-bg { animation: disco 0.3s infinite; padding: 25px; border-radius: 15px; text-align: center; color: white; font-weight: bold; font-size: 35px; text-shadow: 2px 2px #000; }
-    .stButton>button { width: 100%; border-radius: 12px; font-weight: bold; background: linear-gradient(45deg, #00dbde, #fc00ff); color: white; border: none; transition: 0.3s; }
-    .stButton>button:hover { transform: scale(1.02); box-shadow: 0px 0px 15px #fc00ff; }
+    .stButton>button { width: 100%; border-radius: 12px; font-weight: bold; background: linear-gradient(45deg, #00dbde, #fc00ff); color: white; border: none; transition: 0.3s; height: 3em; }
+    .stButton>button:hover { transform: scale(1.05); box-shadow: 0px 0px 15px #fc00ff; }
+    .stat-box { padding: 10px; border-radius: 10px; background: #262730; border-left: 5px solid #fc00ff; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- DATENBANK SETUP ---
-if not os.path.exists("uploads"): os.makedirs("uploads")
+# --- DATENBANK ---
 conn = sqlite3.connect("lost_and_found.db", check_same_thread=False)
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS items 
@@ -35,124 +34,48 @@ c.execute('''CREATE TABLE IF NOT EXISTS items
               category TEXT, image_path TEXT, date TEXT, location TEXT, description TEXT)''')
 conn.commit()
 
-# --- KI MODELL LADEN ---
+# --- KI LADEN ---
 @st.cache_resource
 def load_found_model():
-    model_path, label_path = "keras_model.h5", "labels.txt"
-    if not os.path.exists(model_path) or not os.path.exists(label_path):
-        st.error("⚠️ Dateien fehlen! Bitte stelle sicher, dass keras_model.h5 und labels.txt im Hauptverzeichnis liegen.")
-        st.stop()
-    model = tf.keras.models.load_model(model_path, compile=False)
-    with open(label_path, "r") as f:
+    model = tf.keras.models.load_model("keras_model.h5", compile=False)
+    with open("labels.txt", "r") as f:
         labels = [line.strip().split(maxsplit=1)[-1] for line in f.readlines()]
     return model, labels
 
 model, labels = load_found_model()
 
-# --- SIDEBAR: COOKIE CLICKER GAME ---
-st.sidebar.title("🍪 FUND-CLICKER PRO")
-
+# --- COOKIE CLICKER EMPIRE LOGIK ---
 if 'credits' not in st.session_state: st.session_state.credits = 0
 if 'click_power' not in st.session_state: st.session_state.click_power = 1
-if 'auto_clickers' not in st.session_state: st.session_state.auto_clickers = 0
 if 'last_tick' not in st.session_state: st.session_state.last_tick = time.time()
 
-# Auto-Clicker Berechnung
-cur_time = time.time()
-elapsed = cur_time - st.session_state.last_tick
-if elapsed > 1:
-    st.session_state.credits += st.session_state.auto_clickers * int(elapsed)
-    st.session_state.last_tick = cur_time
+# Helfer-Stufen im Session State initialisieren
+helpers = {
+    "bäcker": {"name": "👨‍🍳 Bäcker", "power": 1, "base_cost": 50},
+    "ki_helfer": {"name": "🤖 KI-Assistent", "power": 5, "base_cost": 250},
+    "roboter": {"name": "🦾 Roboter-Arm", "power": 25, "base_cost": 1200},
+    "fabrik": {"name": "🏭 Fund-Fabrik", "power": 100, "base_cost": 5000}
+}
 
-st.sidebar.metric("Deine Credits 💰", f"{st.session_state.credits:.0f}")
-if st.sidebar.button("🍪 GEGENSTAND FINDEN (KLICK!)"):
-    st.session_state.credits += st.session_state.click_power
+for h_id in helpers:
+    if f"count_{h_id}" not in st.session_state:
+        st.session_state[f"count_{h_id}"] = 0
 
-st.sidebar.divider()
-st.sidebar.subheader("🛒 Shop")
-lupe_cost = 10 * (st.session_state.click_power ** 2)
-if st.sidebar.button(f"🔍 Lupe ({lupe_cost} 💰)"):
-    if st.session_state.credits >= lupe_cost:
-        st.session_state.credits -= lupe_cost
-        st.session_state.click_power += 1
-        st.sidebar.success("Upgrade gekauft!")
-    else: st.sidebar.error("Zu wenig Credits!")
+# Passives Einkommen berechnen
+tps = sum(st.session_state[f"count_{h_id}"] * helpers[h_id]["power"] for h_id in helpers)
+now = time.time()
+dt = now - st.session_state.last_tick
+if dt >= 1:
+    st.session_state.credits += tps * int(dt)
+    st.session_state.last_tick = now
 
-auto_cost = 50 + (st.session_state.auto_clickers * 20)
-if st.sidebar.button(f"🤖 KI-Helfer ({auto_cost} 💰)"):
-    if st.session_state.credits >= auto_cost:
-        st.session_state.credits -= auto_cost
-        st.session_state.auto_clickers += 1
-        st.sidebar.success("Helfer eingestellt!")
-    else: st.sidebar.error("Zu wenig Credits!")
+# --- SIDEBAR: DAS GAME ---
+st.sidebar.title("🍪 FUND-EMPIRE")
+st.sidebar.markdown(f"""<div class="stat-box">
+    <b>Credits: {int(st.session_state.credits)} 💰</b><br>
+    Pro Klick: +{st.session_state.click_power}<br>
+    Pro Sekunde (TPS): {tps}
+</div>""", unsafe_allow_html=True)
 
-st.sidebar.divider()
-menu = ["🏠 Startseite", "📤 Fundstück melden", "🔍 Suchen"]
-choice = st.sidebar.selectbox("Navigation", menu)
-
-# --- HAUPTBEREICH ---
-if choice == "🏠 Startseite":
-    st.title("🚀 Willkommen in der AI Fund-Arena")
-    st.write("Registriere Fundstücke mit künstlicher Intelligenz oder sammle Credits!")
-    st.image("https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800")
-
-elif choice == "📤 Fundstück melden":
-    st.header("📤 Neues Fundstück registrieren")
-    c1, c2 = st.columns(2)
-    with c1:
-        img_file = st.camera_input("Foto machen")
-        up_file = st.file_uploader("Oder Bild hochladen", type=["jpg", "png", "jpeg"])
-        final = img_file if img_file else up_file
-        fundort = st.text_input("📍 Fundort")
-        beschreibung = st.text_area("📝 Beschreibung")
-
-    if final is not None:
-        image = Image.open(final)
-        with c2: st.image(image, width=300, caption="Vorschau")
-        
-        if st.button("🌈 ANALYSE STARTEN (DISKO-MODUS!)"):
-            dp = st.empty()
-            for _ in range(12):
-                dp.markdown(f'<div class="disco-bg">🕺 KI-PARTY ANALYSE... 💃</div>', unsafe_allow_html=True)
-                time.sleep(0.15)
-            dp.empty()
-
-            # KI Analyse
-            size = (224, 224)
-            image_resized = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
-            img_array = np.asarray(image_resized).astype(np.float32) / 127.5 - 1
-            img_array = np.expand_dims(img_array, axis=0)
-            prediction = model.predict(img_array)
-            idx = np.argmax(prediction)
-            det_cat = labels[idx]
-            conf = prediction[0][idx]
-
-            # Speichern
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            path = f"uploads/item_{ts}.jpg"
-            image.save(path)
-            c.execute("INSERT INTO items (category, location, description, image_path, date) VALUES (?, ?, ?, ?, ?)", 
-                      (det_cat, fundort, beschreibung, path, datetime.now().strftime("%d.%m.%Y, %H:%M")))
-            conn.commit()
-            
-            st.session_state.credits += 100
-            st.success(f"🤖 Erkannt als: {det_cat} ({conf:.1%})! +100 Credits erhalten!")
-            st.balloons()
-
-elif choice == "🔍 Suchen":
-    st.header("🔍 Fundstücke durchsuchen")
-    search_cat = st.selectbox("Kategorie wählen", labels)
-    results = c.execute("SELECT id, image_path, date, location, description FROM items WHERE category = ? ORDER BY id DESC", (search_cat,)).fetchall()
-    
-    for res in results:
-        with st.container():
-            ca, cb = st.columns([1, 2])
-            ca.image(res[1], width=200)
-            cb.write(f"**Ort:** {res[3]} | **Datum:** {res[2]}")
-            cb.info(f"Info: {res[4]}")
-            if st.button(f"Abgeholt (ID {res[0]})", key=f"btn_{res[0]}"):
-                if os.path.exists(res[1]): os.remove(res[1])
-                c.execute("DELETE FROM items WHERE id = ?", (res[0],))
-                conn.commit()
-                st.rerun()
-            st.divider()
+if st.sidebar.button("🍪 KLICK FÜR CREDITS!"):
+    st.session_state.credits += st
