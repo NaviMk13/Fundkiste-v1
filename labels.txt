@@ -1,0 +1,4 @@
+0 flasche
+1 Hose
+2 Jacke
+3 Federtasche
