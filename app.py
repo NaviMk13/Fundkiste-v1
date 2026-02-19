@@ -8,8 +8,8 @@ import time
 import random
 from datetime import datetime
 
-# --- DISKO & ARCADE DESIGN ---
-st.set_page_config(page_title="AI Fund-Arena: Cookie Edition", layout="wide")
+# --- DESIGN & DISKO EFFEKTE ---
+st.set_page_config(page_title="AI Fund-Arena: Clicker Edition", layout="wide")
 
 st.markdown("""
     <style>
@@ -32,11 +32,7 @@ conn = sqlite3.connect("lost_and_found.db", check_same_thread=False)
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS items 
              (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-              category TEXT, image_path TEXT, date TEXT)''')
-try:
-    c.execute("ALTER TABLE items ADD COLUMN location TEXT")
-    c.execute("ALTER TABLE items ADD COLUMN description TEXT")
-except: pass
+              category TEXT, image_path TEXT, date TEXT, location TEXT, description TEXT)''')
 conn.commit()
 
 # --- KI MODELL LADEN ---
@@ -44,7 +40,7 @@ conn.commit()
 def load_found_model():
     model_path, label_path = "keras_model.h5", "labels.txt"
     if not os.path.exists(model_path) or not os.path.exists(label_path):
-        st.error("⚠️ Dateien fehlen! Bitte keras_model.h5 und labels.txt hochladen.")
+        st.error("⚠️ Dateien fehlen! Bitte stelle sicher, dass keras_model.h5 und labels.txt im Hauptverzeichnis liegen.")
         st.stop()
     model = tf.keras.models.load_model(model_path, compile=False)
     with open(label_path, "r") as f:
@@ -53,7 +49,7 @@ def load_found_model():
 
 model, labels = load_found_model()
 
-# --- SIDEBAR: FOUND-IT COOKIE CLICKER ---
+# --- SIDEBAR: COOKIE CLICKER GAME ---
 st.sidebar.title("🍪 FUND-CLICKER PRO")
 
 if 'credits' not in st.session_state: st.session_state.credits = 0
@@ -61,7 +57,7 @@ if 'click_power' not in st.session_state: st.session_state.click_power = 1
 if 'auto_clickers' not in st.session_state: st.session_state.auto_clickers = 0
 if 'last_tick' not in st.session_state: st.session_state.last_tick = time.time()
 
-# Auto-Clicker Logik
+# Auto-Clicker Berechnung
 cur_time = time.time()
 elapsed = cur_time - st.session_state.last_tick
 if elapsed > 1:
@@ -79,16 +75,16 @@ if st.sidebar.button(f"🔍 Lupe ({lupe_cost} 💰)"):
     if st.session_state.credits >= lupe_cost:
         st.session_state.credits -= lupe_cost
         st.session_state.click_power += 1
-        st.sidebar.success("Power Up!")
-    else: st.sidebar.error("Zu wenig!")
+        st.sidebar.success("Upgrade gekauft!")
+    else: st.sidebar.error("Zu wenig Credits!")
 
 auto_cost = 50 + (st.session_state.auto_clickers * 20)
 if st.sidebar.button(f"🤖 KI-Helfer ({auto_cost} 💰)"):
     if st.session_state.credits >= auto_cost:
         st.session_state.credits -= auto_cost
         st.session_state.auto_clickers += 1
-        st.sidebar.success("Helfer aktiv!")
-    else: st.sidebar.error("Zu wenig!")
+        st.sidebar.success("Helfer eingestellt!")
+    else: st.sidebar.error("Zu wenig Credits!")
 
 st.sidebar.divider()
 menu = ["🏠 Startseite", "📤 Fundstück melden", "🔍 Suchen"]
@@ -96,6 +92,67 @@ choice = st.sidebar.selectbox("Navigation", menu)
 
 # --- HAUPTBEREICH ---
 if choice == "🏠 Startseite":
-    st.title("🚀 AI Fund-Arena")
-    st.write("Registriere Fundstücke oder sammle Credits im Clicker-Game!")
-    st.image("
+    st.title("🚀 Willkommen in der AI Fund-Arena")
+    st.write("Registriere Fundstücke mit künstlicher Intelligenz oder sammle Credits!")
+    st.image("https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800")
+
+elif choice == "📤 Fundstück melden":
+    st.header("📤 Neues Fundstück registrieren")
+    c1, c2 = st.columns(2)
+    with c1:
+        img_file = st.camera_input("Foto machen")
+        up_file = st.file_uploader("Oder Bild hochladen", type=["jpg", "png", "jpeg"])
+        final = img_file if img_file else up_file
+        fundort = st.text_input("📍 Fundort")
+        beschreibung = st.text_area("📝 Beschreibung")
+
+    if final is not None:
+        image = Image.open(final)
+        with c2: st.image(image, width=300, caption="Vorschau")
+        
+        if st.button("🌈 ANALYSE STARTEN (DISKO-MODUS!)"):
+            dp = st.empty()
+            for _ in range(12):
+                dp.markdown(f'<div class="disco-bg">🕺 KI-PARTY ANALYSE... 💃</div>', unsafe_allow_html=True)
+                time.sleep(0.15)
+            dp.empty()
+
+            # KI Analyse
+            size = (224, 224)
+            image_resized = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
+            img_array = np.asarray(image_resized).astype(np.float32) / 127.5 - 1
+            img_array = np.expand_dims(img_array, axis=0)
+            prediction = model.predict(img_array)
+            idx = np.argmax(prediction)
+            det_cat = labels[idx]
+            conf = prediction[0][idx]
+
+            # Speichern
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = f"uploads/item_{ts}.jpg"
+            image.save(path)
+            c.execute("INSERT INTO items (category, location, description, image_path, date) VALUES (?, ?, ?, ?, ?)", 
+                      (det_cat, fundort, beschreibung, path, datetime.now().strftime("%d.%m.%Y, %H:%M")))
+            conn.commit()
+            
+            st.session_state.credits += 100
+            st.success(f"🤖 Erkannt als: {det_cat} ({conf:.1%})! +100 Credits erhalten!")
+            st.balloons()
+
+elif choice == "🔍 Suchen":
+    st.header("🔍 Fundstücke durchsuchen")
+    search_cat = st.selectbox("Kategorie wählen", labels)
+    results = c.execute("SELECT id, image_path, date, location, description FROM items WHERE category = ? ORDER BY id DESC", (search_cat,)).fetchall()
+    
+    for res in results:
+        with st.container():
+            ca, cb = st.columns([1, 2])
+            ca.image(res[1], width=200)
+            cb.write(f"**Ort:** {res[3]} | **Datum:** {res[2]}")
+            cb.info(f"Info: {res[4]}")
+            if st.button(f"Abgeholt (ID {res[0]})", key=f"btn_{res[0]}"):
+                if os.path.exists(res[1]): os.remove(res[1])
+                c.execute("DELETE FROM items WHERE id = ?", (res[0],))
+                conn.commit()
+                st.rerun()
+            st.divider()
