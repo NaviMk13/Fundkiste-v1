@@ -7,7 +7,7 @@ import os
 import time
 from datetime import datetime
 
-# --- DESIGN & DISKO ---
+# --- DESIGN & DISKO EFFEKTE ---
 st.set_page_config(page_title="AI Fund-Arena: Empire Edition", layout="wide")
 
 st.markdown("""
@@ -26,7 +26,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- DATENBANK ---
+# --- DATENBANK SETUP ---
 conn = sqlite3.connect("lost_and_found.db", check_same_thread=False)
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS items 
@@ -34,43 +34,48 @@ c.execute('''CREATE TABLE IF NOT EXISTS items
               category TEXT, image_path TEXT, date TEXT, location TEXT, description TEXT)''')
 conn.commit()
 
-# --- KI MODELL ---
+# --- KI MODELL LADEN MIT SICHERHEITS-CHECK ---
 @st.cache_resource
 def load_found_model():
-    if not os.path.exists("keras_model.h5"):
-        st.error("Datei keras_model.h5 fehlt!")
+    model_path = "keras_model.h5"
+    label_path = "labels.txt"
+    
+    if not os.path.exists(model_path):
+        st.error(f"⚠️ Die Datei {model_path} wurde nicht gefunden!")
         st.stop()
-    model = tf.keras.models.load_model("keras_model.h5", compile=False)
-    with open("labels.txt", "r") as f:
+        
+    # Prüfe auf beschädigte/unvollständige Datei (wegen weißem Bildschirm)
+    file_size = os.path.getsize(model_path)
+    if file_size < 1000000: # Kleiner als 1MB ist bei diesem Modell ein Fehler
+        st.error(f"⚠️ Modell-Datei beschädigt! Größe: {file_size} Bytes. Bitte lade die keras_model.h5 neu auf GitHub hoch.")
+        st.stop()
+
+    model = tf.keras.models.load_model(model_path, compile=False)
+    with open(label_path, "r") as f:
         labels = [line.strip().split(maxsplit=1)[-1] for line in f.readlines()]
     return model, labels
 
 model, labels = load_found_model()
 
-# --- EMPIRE GAME LOGIK ---
+# --- COOKIE-CLICKER EMPIRE LOGIK ---
 if 'credits' not in st.session_state: st.session_state.credits = 0
 if 'click_power' not in st.session_state: st.session_state.click_power = 1
 if 'last_tick' not in st.session_state: st.session_state.last_tick = time.time()
 
-# Alle Upgrade-Figuren
+# Die verschiedenen passiven Helfer
 upgrades = {
-    "bäcker": {"name": "👨‍🍳 Fleißiger Bäcker", "power": 1, "cost": 50},
-    "ki_bot": {"name": "🤖 KI-Suchbot", "power": 8, "cost": 400},
-    "detektiv": {"name": "🕵️‍♂️ Meister-Detektiv", "power": 40, "cost": 2000},
-    "satellit": {"name": "🛰️ Fund-Satellit", "power": 150, "cost": 10000},
-    "alien": {"name": "👽 Intergalaktischer Finder", "power": 500, "cost": 50000}
+    "bäcker": {"name": "👨‍🍳 Bäcker", "power": 1, "cost": 50},
+    "ki_bot": {"name": "🤖 KI-Suchbot", "power": 10, "cost": 500},
+    "detektiv": {"name": "🕵️‍♂️ Meister-Detektiv", "power": 50, "cost": 2500},
+    "roboter": {"name": "🦾 Greifarm-Armee", "power": 200, "cost": 10000},
+    "satellit": {"name": "🛰️ Fund-Satellit", "power": 1000, "cost": 50000}
 }
 
 for uid in upgrades:
     if f"count_{uid}" not in st.session_state: st.session_state[f"count_{uid}"] = 0
 
-# Passives Einkommen (TPS) berechnen
+# Passive Einnahmen berechnen
 tps = sum(st.session_state[f"count_{u}"] * upgrades[u]["power"] for u in upgrades)
 now = time.time()
 diff = now - st.session_state.last_tick
-
-if diff >= 1:
-    st.session_state.credits += tps * int(diff)
-    st.session_state.last_tick = now
-
-# --- SIDEBAR GAME CENTER
+if diff >=
